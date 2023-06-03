@@ -1,22 +1,79 @@
-const getAllJobs = (req, res) => {
-  res.send("Get all jobs");
-};
+const Job = require("../models/Job.model");
+const catchAsync = require("../utils/catchAsync");
+const filterObj = require("../utils/filterObj");
+const { StatusCodes } = require("http-status-codes");
+const { NotFoundError, BadRequestError } = require("../errors");
 
-const getJob = (req, res) => {
-  res.send("Get job");
-};
+// Get all user's jobs:
+const getAllJobs = catchAsync(async (req, res, next) => {
+  const jobs = await Job.find({ createdBy: req.user.id }).sort("createdAt");
+  res.status(StatusCodes.OK).json({
+    count: jobs.length,
+    jobs,
+  });
+});
 
-const createJob = (req, res) => {
-  res.json(req.user);
-};
+// Get single job:
+const getJob = catchAsync(async (req, res, next) => {
+  const {
+    user: { id: userId },
+    params: { id: jobId },
+  } = req;
 
-const updateJob = (req, res) => {
-  res.send("Update job");
-};
+  const job = await Job.findOne({ _id: jobId, createdBy: userId });
 
-const deleteJob = (req, res) => {
-  res.send("Delete job");
-};
+  if (!job) {
+    throw new NotFoundError(`No job found for ${userId}.`);
+  }
+  res.status(StatusCodes.OK).json({ job });
+});
+
+const createJob = catchAsync(async (req, res, next) => {
+  req.body.createdBy = req.user.id;
+  const job = await Job.create(req.body);
+  res.status(StatusCodes.CREATED).json(job);
+});
+
+// Update job:
+const updateJob = catchAsync(async (req, res, next) => {
+  const {
+    body,
+    user: { id: userId },
+    params: { id: jobId },
+  } = req;
+
+  const filteredObj = filterObj(body, "company", "position");
+
+  if (filteredObj.company === "" || filteredObj.position === "") {
+    throw new BadRequestError("Company or Position cannot be empty!");
+  }
+
+  const job = await Job.findByIdAndUpdate(
+    { _id: jobId, createdBy: userId },
+    filteredObj,
+    { new: true, runValidators: true }
+  );
+
+  if (!job) {
+    throw new NotFoundError(`No job found for ${userId}.`);
+  }
+  res.status(StatusCodes.OK).json({ job });
+});
+
+// Delete job:
+const deleteJob = catchAsync(async (req, res, next) => {
+  const {
+    user: { id: userId },
+    params: { id: jobId },
+  } = req;
+
+  const deletedJob = await Job.findByIdAndDelete({ _id: jobId, createdBy: userId });
+
+  if (!deletedJob) {
+    throw new NotFoundError(`No job found for ${userId}.`);
+  }
+  res.status(StatusCodes.OK);
+});
 
 module.exports = {
   getAllJobs,
