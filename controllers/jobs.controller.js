@@ -1,3 +1,6 @@
+const mongoose = require("mongoose");
+const moment = require("moment");
+
 const Job = require("../models/Job.model");
 const catchAsync = require("../utils/catchAsync");
 const filterObj = require("../utils/filterObj");
@@ -6,10 +9,56 @@ const { NotFoundError, BadRequestError } = require("../errors");
 
 // Get all user's jobs:
 const getAllJobs = catchAsync(async (req, res, next) => {
-  const jobs = await Job.find({ createdBy: req.user.id }).sort("createdAt");
+  const { search, status, jobType, sort } = req.query;
+
+  const queryObject = {
+    createdBy: req.user.userId,
+  };
+
+  if (search) {
+    queryObject.position = { $regex: search, $options: "i" };
+  }
+
+  if (status && status !== "all") {
+    queryObject.status = status;
+  }
+
+  if (jobType && jobType !== "all") {
+    queryObject.status = status;
+  }
+
+  // Sorting...
+  if (sort === "latest") {
+    result = result.sort("-createdAt");
+  }
+  if (sort === "oldest") {
+    result = result.sort("createdAt");
+  }
+  if (sort === "a-z") {
+    result = result.sort("position");
+  }
+  if (sort === "z-a") {
+    result = result.sort("-position");
+  }
+
+  // Pagination...
+  const page = Number(req.query.page) || 1;
+  const limit = Number(req.query.limit) || 10;
+  const skip = (page - 1) * limit;
+
+  result = result.skip(skip).limit(limit);
+
+  let result = Job.find(queryObject);
+
+  const jobs = await result;
+
+  const totalJobs = await Job.countDocuments(queryObject);
+  const numOfPages = Math.ceil(totalJobs / limit);
+
   res.status(StatusCodes.OK).json({
-    count: jobs.length,
     jobs,
+    totalJobs,
+    numOfPages,
   });
 });
 
@@ -75,10 +124,33 @@ const deleteJob = catchAsync(async (req, res, next) => {
   res.status(StatusCodes.OK);
 });
 
+// Show status:
+const showStats = catchAsync(async (req, res, next) => {
+  let stats = await Job.aggregate([
+    { $match: { createdBy: mongoose.Types.ObjectId(req.user.id) } },
+    { $group: { _id: "$status", count: { $sum: 1 } } },
+  ]);
+
+  stats = stats.reduce((acc, curr) => {
+    const { _id: title, count } = curr;
+    acc[title] = count;
+    return acc;
+  }, {});
+
+  const defaultStats = {
+    pending: stats.pending || 0,
+    interview: stats.interview || 0,
+    declined: stats.declined || 0,
+  };
+
+  res.status(StatusCodes.OK).json({ defaultStats });
+});
+
 module.exports = {
   getAllJobs,
   getJob,
   createJob,
   updateJob,
   deleteJob,
+  showStats,
 };
