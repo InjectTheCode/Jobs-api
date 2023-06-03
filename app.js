@@ -3,6 +3,7 @@ require("express-async-errors");
 const express = require("express");
 const authRoute = require("./routes/auth.route");
 const jobsRoute = require("./routes/jobs.route");
+const authMidddleware = require("./middleware/auth.midd");
 
 const app = express();
 
@@ -15,7 +16,7 @@ app.use(express.json());
 
 // routes
 app.use("/api/v1/auth", authRoute);
-app.use("/api/v1/jobs", jobsRoute);
+app.use("/api/v1/jobs", authMidddleware, jobsRoute);
 
 app.use(notFoundMiddleware);
 app.use(errorHandlerMiddleware);
